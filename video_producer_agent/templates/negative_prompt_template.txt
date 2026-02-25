@@ -1,0 +1,1 @@
+low quality, blurry, distorted, bad anatomy, watermark, text, signature, mutation, deformed, ugly, bad proportions, {negative_constraints}

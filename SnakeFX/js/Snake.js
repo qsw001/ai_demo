@@ -24,7 +24,8 @@ export class Snake {
         this.lastDirection = { x: 1, y: 0 }; // 记录最后移动方向用于射击
     }
 
-    update(dt, inputDir, gridCols, gridRows) {
+    // inputSource: 可以是 Input 实例，也可以是方向对象 (兼容旧代码)
+    update(dt, inputSource, gridCols, gridRows) {
         if (this.isDead) return;
 
         // 更新射击冷却
@@ -35,27 +36,34 @@ export class Snake {
         this.moveTimer += dt;
         if (this.moveTimer >= Config.SNAKE_SPEED) {
             this.moveTimer = 0;
-            this.move(inputDir, gridCols, gridRows);
+            
+            let dir = { x: 0, y: 0 };
+            
+            // 如果 inputSource 是 Input 实例，则调用 popDirection 获取最新指令
+            if (inputSource && typeof inputSource.popDirection === 'function') {
+                dir = inputSource.popDirection();
+            } 
+            // 兼容直接传入方向对象的情况
+            else if (inputSource && typeof inputSource.x === 'number') {
+                dir = inputSource;
+            }
+            
+            this.move(dir, gridCols, gridRows);
         }
     }
 
     move(dir, cols, rows) {
         const head = this.body[0];
-        // 如果输入方向为0（没按键），保持原方向
-        if (dir.x !== 0 || dir.y !== 0) {
-            this.lastDirection = dir;
-        } else {
-            // 这里有个小问题，input类会保持方向，所以dir通常不为0
-            // 除非是初始化状态
-        }
         
         // 确保使用当前实际移动方向更新 lastDirection
         // Input 类已经处理了反向逻辑，所以这里的 dir 是有效的移动方向
-        this.lastDirection = dir;
+        if (dir.x !== 0 || dir.y !== 0) {
+            this.lastDirection = dir;
+        }
 
         const newHead = {
-            x: head.x + dir.x,
-            y: head.y + dir.y
+            x: head.x + this.lastDirection.x,
+            y: head.y + this.lastDirection.y
         };
 
         // 撞墙检测

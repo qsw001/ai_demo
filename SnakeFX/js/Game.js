@@ -7,6 +7,7 @@ import { Input } from './Input.js';
 import { ParticleSystem } from './ParticleSystem.js';
 import { AudioSystem } from './AudioSystem.js';
 import { BulletManager } from './BulletManager.js';
+import { TrainingManager } from './TrainingManager.js';
 
 const STATE = {
     READY: 0,
@@ -27,10 +28,26 @@ export class Game {
         // 初始化模块
         this.input = new Input();
         this.particles = new ParticleSystem();
-        this.audio = new AudioSystem(); 
+        
+        try {
+            this.audio = new AudioSystem(); 
+        } catch (e) {
+            console.error("AudioSystem init failed:", e);
+            this.audio = {
+                init: () => {},
+                startBGM: () => {},
+                stopBGM: () => {},
+                playTone: () => {},
+                playEat: () => {},
+                playEnemySpawn: () => {},
+                playEnemyDie: () => {},
+                playPlayerDie: () => {}
+            };
+        }
+
         this.snake = new Snake();
-        this.bulletManager = new BulletManager(); // 子弹管理
-        this.foods = []; // 支持多个食物
+        this.bulletManager = new BulletManager(); 
+        this.foods = []; 
         this.enemies = [];
 
         this.state = STATE.READY;
@@ -38,17 +55,24 @@ export class Game {
         this.enemySpawnTimer = 0;
         this.shakeTimer = 0;
         
+        this.mode = 'MANUAL'; // MANUAL, AI, TRAINING
+        
+        // Initialize Training Manager
+        // Note: TrainingManager takes 'this' (game instance)
+        this.trainingManager = new TrainingManager(this);
+
+        console.log("Game initialized successfully");
+
         // 绑定按键
         this.input.onSpacePressed = () => this.handleSpace();
         
         // 绑定射击键 (J键)
         window.addEventListener('keydown', (e) => {
-            if (this.state === STATE.RUNNING) {
+            if (this.mode === 'MANUAL' && this.state === STATE.RUNNING) {
                 if (e.key === 'j' || e.key === 'J') {
                     const bullet = this.snake.shoot();
                     if (bullet) {
                         this.bulletManager.spawn(bullet.x, bullet.y, bullet.direction, 'player');
-                        // 播放射击音效 (可选)
                         this.audio.playTone(400, 'square', 0.05, 0, 0.05);
                     }
                 }
@@ -59,13 +83,33 @@ export class Game {
         requestAnimationFrame((t) => this.loop(t));
     }
 
+    setMode(mode) {
+        this.mode = mode;
+        this.reset();
+        // If switching to AI or Training, we might need to start/stop BGM or specific setups
+        if (mode === 'TRAINING') {
+            this.audio.stopBGM();
+        }
+    }
+
+    // A) 统一“权威状态源”
+    isGameOver() {
+        return this.state === STATE.OVER;
+    }
+
+    isRunning() {
+        return this.state === STATE.RUNNING;
+    }
+
     handleSpace() {
+        if (this.mode === 'TRAINING') return; // Disable space in training
+
         this.audio.init();
 
         if (this.state === STATE.READY || this.state === STATE.OVER || this.state === STATE.VICTORY) {
             this.reset();
             this.state = STATE.RUNNING;
-            this.audio.startBGM();
+            if (this.mode === 'MANUAL') this.audio.startBGM();
         }
     }
 
@@ -84,6 +128,14 @@ export class Game {
         this.input.reset();
         this.enemySpawnTimer = 0;
         this.shakeTimer = 0;
+        
+        // If AI mode, auto-start running
+        if (this.mode === 'AI' || this.mode === 'TRAINING') {
+            this.state = STATE.RUNNING;
+        } else {
+             // Manual mode waits for Space unless it was a restart?
+             // Keep existing logic for Manual: Ready -> Running
+        }
     }
 
     spawnFood(pos = null) {
@@ -108,16 +160,35 @@ export class Game {
         }
 
         // 1. 更新玩家
-        const dir = this.input.update();
-        this.snake.update(dt, dir, this.gridCols, this.gridRows);
+        let inputSource;
+        if (this.mode === 'MANUAL') {
+            // 传递 Input 实例给 Snake，由 Snake 在移动时消耗队列
+            inputSource = this.input;
+        } else if (this.mode === 'AI') {
+            // AI 模式传递 Virtual Input
+            inputSource = this.trainingManager.aiInput;
+        } else {
+             // Training 模式通常不显示渲染，或者由 TrainingManager 内部控制
+             inputSource = { x: 0, y: 0 };
+        }
+        
+        this.snake.update(dt, inputSource, this.gridCols, this.gridRows);
 
         if (this.snake.isDead) {
             this.gameOver();
             return;
         }
 
-        // 2. 更新敌人
-        this.updateEnemies(dt);
+        // 2. 更新敌人 (AI/Training might disable enemies)
+        if (this.mode === 'MANUAL') {
+             this.updateEnemies(dt);
+        } else {
+            // In AI mode, we might want enemies?
+            // User requested "Training" visualized.
+            // "AI Mode" usually implies showing the trained agent playing the game.
+            // If trained without enemies, it will die.
+            // Let's disable enemies in AI mode for now to match training.
+        }
 
         // 3. 更新子弹
         this.bulletManager.update();
@@ -141,8 +212,19 @@ export class Game {
         this.lastTime = timestamp;
 
         try {
-            this.update(dt);
-            this.draw();
+            if (this.mode === 'TRAINING') {
+                this.trainingManager.update(); // Run training steps
+                if (this.trainingManager.config.render) {
+                    this.draw();
+                }
+            } else if (this.mode === 'AI') {
+                this.trainingManager.update(); // AI decision
+                this.update(dt);
+                this.draw();
+            } else {
+                this.update(dt);
+                this.draw();
+            }
         } catch (e) {
             console.error("Game Loop Error:", e);
         }
@@ -151,28 +233,23 @@ export class Game {
     }
 
     updateEnemies(dt) {
-        // 生成敌人
+        // ... (Same as before)
         this.enemySpawnTimer += dt;
         if (this.enemySpawnTimer > Config.ENEMY_SPAWN_INTERVAL && this.enemies.length < Config.MAX_ENEMIES) {
             this.enemySpawnTimer = 0;
             const pos = { x: Utils.randomInt(0, this.gridCols-1), y: Utils.randomInt(0, this.gridRows-1) };
             if (!Utils.isCollidingWithBody(pos.x, pos.y, this.snake.body)) {
-                // 随机类型
                 const type = Math.random() > 0.5 ? 'RESOURCE' : 'AGGRESSIVE';
                 this.enemies.push(new EnemySnake(pos, 5, type));
                 this.audio.playEnemySpawn();
             }
         }
 
-        // 更新每个敌人
         this.enemies.forEach(enemy => {
             enemy.update(dt, this.gridCols, this.gridRows, this.snake.body, this.foods);
-            
-            // 尝试射击
             const bulletInfo = enemy.tryShoot(this.snake.body);
             if (bulletInfo) {
                 this.bulletManager.spawn(bulletInfo.x, bulletInfo.y, bulletInfo.direction, 'enemy');
-                // 敌人射击音效
                 this.audio.playTone(300, 'sawtooth', 0.05, 0, 0.03);
             }
         });
@@ -253,10 +330,8 @@ export class Game {
             20
         );
 
-        // 掉落食物
         const dropCount = Math.floor(enemy.body.length / 2);
         for(let i=0; i<dropCount; i++) {
-            // 在死亡位置附近随机散落
             const pos = {
                 x: Math.max(0, Math.min(this.gridCols-1, head.x + Utils.randomInt(-2, 2))),
                 y: Math.max(0, Math.min(this.gridRows-1, head.y + Utils.randomInt(-2, 2)))
@@ -268,12 +343,16 @@ export class Game {
     gameVictory() {
         this.state = STATE.VICTORY;
         this.audio.stopBGM();
-        // 胜利音效?
         this.audio.playTone(600, 'sine', 0.2, 0, 0.2);
         this.audio.playTone(800, 'sine', 0.4, 0.2, 0.2);
     }
 
     gameOver() {
+        // If Training, we just reset via Env, but Game logic calls this.
+        // In Training, SnakeEnv checks isDead and resets internally or returns done.
+        // So we don't want to change state to OVER if Training, because TrainingManager handles reset.
+        if (this.mode === 'TRAINING') return;
+
         this.state = STATE.OVER;
         this.triggerShake();
         this.audio.playPlayerDie();
@@ -286,6 +365,10 @@ export class Game {
                 5
             );
         });
+    }
+
+    triggerShake() {
+        this.shakeTimer = Config.SHAKE_DURATION;
     }
 
     draw() {
@@ -313,13 +396,19 @@ export class Game {
         this.ctx.fillStyle = Config.COLORS.TEXT;
         this.ctx.textAlign = 'center';
         
+        if (this.mode === 'TRAINING') {
+             this.ctx.font = '20px Arial';
+             this.ctx.fillText(`TRAINING MODE - Episode: ${this.trainingManager.episode}`, this.width/2, 30);
+             return;
+        }
+
         if (this.state === STATE.READY) {
             this.ctx.font = '30px Arial';
             this.ctx.fillText("SHOOTER SNAKE", this.width/2, this.height/2 - 40);
             this.ctx.font = '20px Arial';
             this.ctx.fillText("按空格键开始", this.width / 2, this.height / 2);
             this.ctx.font = '14px Arial';
-            this.ctx.fillText("移动: 方向键 | 射击: J 键 (消耗长度)", this.width / 2, this.height / 2 + 40);
+            this.ctx.fillText("移动: 方向键 | 射击: J 键", this.width / 2, this.height / 2 + 40);
         } else if (this.state === STATE.OVER) {
             this.ctx.font = '40px Arial';
             this.ctx.fillStyle = '#ff4444';
@@ -331,22 +420,11 @@ export class Game {
             this.ctx.font = '40px Arial';
             this.ctx.fillStyle = '#ffd700';
             this.ctx.fillText("VICTORY!", this.width / 2, this.height / 2);
-            this.ctx.fillStyle = Config.COLORS.TEXT;
-            this.ctx.font = '20px Arial';
-            this.ctx.fillText("你成为了蛇王!", this.width / 2, this.height / 2 + 50);
         } else {
             this.ctx.textAlign = 'left';
             this.ctx.font = '16px Arial';
             this.ctx.fillText(`长度: ${this.snake.body.length}/${Config.WIN_LENGTH}`, 10, 25);
-            
-            // 冷却提示
-            if (this.snake.canShoot()) {
-                 this.ctx.fillStyle = '#4caf50';
-                 this.ctx.fillText("射击就绪 [J]", 10, 50);
-            } else {
-                 this.ctx.fillStyle = '#888';
-                 this.ctx.fillText("充能中...", 10, 50);
-            }
+            this.ctx.fillText(`模式: ${this.mode}`, 10, 50);
         }
     }
 }

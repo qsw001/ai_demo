@@ -3,12 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SnakeFX - 创新特效贪吃蛇</title>
+    <title>SnakeFX - AI Training</title>
     <link rel="stylesheet" href="css/style.css">
+    <!-- TensorFlow.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
+    <div id="main-container">
+        <div id="game-container">
+            <canvas id="gameCanvas"></canvas>
+        </div>
+
+        <div id="control-panel">
+            <div class="panel-section">
+                <h3>Mode Selection</h3>
+                <button id="btn-manual">Manual Play</button>
+                <button id="btn-ai">AI Demo</button>
+                <button id="btn-train">Training</button>
+            </div>
+
+            <div class="panel-section">
+                <h3>Training Controls</h3>
+                <div class="stat-row">
+                    <span>Speed: <span id="val-speed">1x</span></span>
+                </div>
+                <input type="range" id="slider-speed" min="1" max="100" value="1" title="Training Speed (Steps per Frame)">
+                <br>
+                <button id="btn-save">Save Model</button>
+                <button id="btn-load">Load Model</button>
+            </div>
+
+            <div class="panel-section">
+                <h3>Statistics</h3>
+                <div class="stat-row"><span>Episode:</span> <span id="stat-episode">0</span></div>
+                <div class="stat-row"><span>Epsilon:</span> <span id="stat-epsilon">1.00</span></div>
+                
+                <h4>Reward History</h4>
+                <canvas id="chartCanvas" width="260" height="80" style="background: #111; border: 1px solid #333; border-radius: 4px;"></canvas>
+                
+                <h4>Action Q-Values</h4>
+                <canvas id="qChartCanvas" width="260" height="80" style="background: #111; border: 1px solid #333; border-radius: 4px;"></canvas>
+            </div>
+
+            <div class="panel-section">
+                <h4>Instructions</h4>
+                <div style="font-size: 12px; color: #888;">
+                    <p>1. <b>Training</b>: Trains the AI. Speed up with slider.</p>
+                    <p>2. <b>AI Demo</b>: Runs the trained model.</p>
+                    <p>3. <b>Manual</b>: Play with Arrow Keys + J (Shoot).</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- 模块化引入 -->

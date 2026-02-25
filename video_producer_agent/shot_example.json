@@ -1,0 +1,11 @@
+{
+  "episode_id": "EP001",
+  "shot_id": "S005",
+  "video_main_subject": "A cyberpunk detective",
+  "video_shoot_desc": "walking through a rainy neon city at night",
+  "video_duration_sec": 5,
+  "video_use_voice_duration": false,
+  "camera": "tracking shot",
+  "lighting": "neon lights, reflections",
+  "style": "cyberpunk"
+}
