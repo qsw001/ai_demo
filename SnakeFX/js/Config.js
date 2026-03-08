@@ -28,7 +28,7 @@ export const Config = {
     MIN_FOODS: 3,   // 地图最少糖豆数
     
     // 子弹配置
-    BULLET_SPEED: 1, // 像素/帧 (降低一半，给玩家反应时间)
+    BULLET_SPEED: 0.5, // 像素/帧 (降低一半，给玩家反应时间)
     BULLET_COOLDOWN: 500, // ms
     BULLET_COST: 1, // 发射消耗身体长度
 

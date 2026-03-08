@@ -1,0 +1,6 @@
+PySide6
+langchain-openai
+python-dotenv
+pynput
+darkdetect
+pywin32; sys_platform == 'win32'
